@@ -3,6 +3,7 @@
   stdenv,
   fetchFromGitHub,
   nixosTests,
+  pam,
 }:
 
 stdenv.mkDerivation rec {
@@ -24,12 +25,23 @@ stdenv.mkDerivation rec {
       --replace "/usr" ""
   '';
 
-  makeFlags = [
-    "-f Makefile.Linux"
-    "INSTALL=install"
-    "DESTDIR=${placeholder "out"}"
-    "CC:=$(CC)"
-  ];
+  makeFlags =
+    let
+      makefile = if stdenv.isDarwin then "Makefile.Darwin" else "Makefile.Linux";
+    in
+    [
+      "-f ${makefile}"
+      "INSTALL=install"
+      "DESTDIR=${placeholder "out"}"
+      "CC:=$(CC)"
+    ];
+
+  nativeBuildInputs = lib.optionals stdenv.isDarwin [ pam ];
+
+  preBuild = lib.optional stdenv.isDarwin ''
+    sed '/^install:/,$d' Makefile.FreeBSD >Makefile.Darwin
+    echo -e '\nDESTDIR = \ninstall: all\n\tcp -r ./bin $(DESTDIR)/.' >>Makefile.Darwin
+  '';
 
   postInstall = ''
     rm -fr $out/var
@@ -46,7 +58,7 @@ stdenv.mkDerivation rec {
     description = "Tiny free proxy server";
     homepage = "https://github.com/3proxy/3proxy";
     license = lib.licenses.bsd2;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ lib.platforms.darwin;
     maintainers = with lib.maintainers; [ misuzu ];
   };
 }
